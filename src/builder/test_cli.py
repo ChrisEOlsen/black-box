@@ -256,3 +256,22 @@ def test_help_lists_the_commands(ws: Workspace) -> None:
     out = run([], ws)
     for command in ("inspect", "sql", "model", "page", "handler", "resource"):
         assert command in out
+
+
+def test_a_format_hint_mismatch_explains_itself_in_the_callers_words(ws: Workspace) -> None:
+    """`due_at:datetime` resolves to a string with a format hint, so an error
+    saying only "declared as string" describes something nobody typed."""
+    run(
+        [
+            "sql",
+            "-query",
+            "CREATE TABLE events (id INTEGER PRIMARY KEY, at DATETIME, "
+            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP);",
+        ],
+        ws,
+    )
+    with pytest.raises(ToolError) as caught:
+        run(["model", "-name", "event", "-fields", "at:datetime"], ws)
+    message = str(caught.value)
+    assert "declared as datetime" in message
+    assert "at:timestamp" in message

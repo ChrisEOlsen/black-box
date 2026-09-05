@@ -90,3 +90,38 @@ def test_a_short_secret_is_refused(client: TestClient, monkeypatch: pytest.Monke
     monkeypatch.setenv("SESSION_SECRET", "too-short")
     with pytest.raises(RuntimeError, match="at least 32"):
         client.post("/issue")
+
+
+# --- cookie attributes ---------------------------------------------------
+
+
+def cookie_header(client: TestClient) -> str:
+    return client.post("/issue").headers["set-cookie"]
+
+
+def test_session_cookie_is_httponly_and_samesite_strict(client: TestClient) -> None:
+    """HttpOnly keeps it away from any script that reaches the page; Strict is
+    what stops it riding a cross-site navigation."""
+    header = cookie_header(client).lower()
+    assert "httponly" in header
+    assert "samesite=strict" in header
+    assert "path=/" in header
+
+
+def test_session_cookie_is_not_secure_outside_production(client: TestClient) -> None:
+    """Otherwise local development over http could never hold a session."""
+    assert "secure" not in cookie_header(client).lower()
+
+
+def test_session_cookie_is_secure_in_production(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    assert "secure" in cookie_header(client).lower()
+
+
+def test_the_cookie_body_does_not_carry_the_secret(client: TestClient) -> None:
+    """It carries claims plus an HMAC, never the key that signed them."""
+    from conftest import TEST_SECRET
+
+    assert TEST_SECRET not in cookie_header(client)

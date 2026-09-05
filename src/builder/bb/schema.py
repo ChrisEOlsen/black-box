@@ -11,7 +11,7 @@ import sqlite3
 import sys
 from dataclasses import dataclass
 
-from bb.fields import Field, is_safe_ident, validate_field_types
+from bb.fields import SEMANTIC_FORMATS, Field, is_safe_ident, validate_field_types
 
 # Names that would collide with hand-written code in the models package.
 # `timestamp`, `query`, `user` and `mobile_token` are modules that already
@@ -184,6 +184,33 @@ def require_implicit_columns(table: str, columns: list[Column]) -> None:
         )
 
 
+def describe_type_mismatch(table: str, f: Field, column: Column, accepted: list[str]) -> str:
+    """Explain a declared/actual type mismatch in the caller's own words.
+
+    A semantic hint like `due_at:datetime` resolves to a string with a format,
+    so naming only the resolved type ("declared as string") describes something
+    the author never typed. The hint is named back to them, along with the two
+    ways out.
+    """
+    declared = f.type
+    detail = ""
+    if f.format:
+        hint = next(
+            (name for name, mapped in SEMANTIC_FORMATS.items() if mapped == f.format), f.format
+        )
+        declared = hint
+        detail = (
+            f" — {hint} is a TEXT column carrying a format hint, which is not the same as "
+            f"timestamp. Either declare the column TEXT, or use {f.name}:timestamp to keep "
+            "the DATETIME column."
+        )
+    return (
+        f"field {f.name!r} declared as {declared} (expects a "
+        f"{' or '.join(accepted)} column) but column {table}.{f.name} is "
+        f"{column.sql_type}{detail}"
+    )
+
+
 def apply_schema(dsn: str, table: str, fields: list[Field]) -> list[Field]:
     """Validate declared fields against the real table and fill in nullability."""
     columns = table_columns(dsn, table)
@@ -207,10 +234,7 @@ def apply_schema(dsn: str, table: str, fields: list[Field]) -> list[Field]:
             )
         accepted = accepted_sql_types(f.type)
         if column.sql_type not in accepted:
-            raise SchemaError(
-                f"field {f.name!r} declared as {f.type} (expects {' or '.join(accepted)}) "
-                f"but column {table}.{f.name} is {column.sql_type}"
-            )
+            raise SchemaError(describe_type_mismatch(table, f, column, accepted))
         out.append(
             Field(
                 name=f.name, type=f.type, nullable=not column.not_null, format=f.format, ref=f.ref

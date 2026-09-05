@@ -4,6 +4,7 @@ import time
 
 import pytest
 
+from db.database import Database
 from db.testutil import open_test
 from models.mobile_token import (
     MobileTokenModel,
@@ -14,8 +15,8 @@ from models.mobile_token import (
 from models.user import UserModel
 
 
-def seed_user(db: object) -> int:
-    return UserModel(db).create("Ada", "a@b.co", "correct-horse-battery")  # type: ignore[arg-type]
+def seed_user(db: Database) -> int:
+    return UserModel(db).create("Ada", "a@b.co", "correct-horse-battery")
 
 
 def test_token_is_64_hex_characters() -> None:

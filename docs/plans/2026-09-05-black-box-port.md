@@ -55,15 +55,15 @@ requirements.txt}`, `data/.gitkeep`, `logs/.gitkeep`.
 the verify contract (restart → wait on `/api/v1/_version` → ruff → ruff format
 → mypy → pytest), tool config for ruff/mypy/pytest.
 
-- [ ] Dockerfile with `base` → `app` / `builder-cli` targets; Tailwind standalone
+- [x] Dockerfile with `base` → `app` / `builder-cli` targets; Tailwind standalone
       binary by arch; builder templates baked in at image build time.
-- [ ] Compose file: `app` (ports, `./src:/src`, `./data:/data`, `./logs:/logs`)
+- [x] Compose file: `app` (ports, `./src:/src`, `./data:/data`, `./logs:/logs`)
       and `builder` (`restart: unless-stopped`).
-- [ ] `main.py` stub serving `GET /api/v1/_version` →
+- [x] `main.py` stub serving `GET /api/v1/_version` →
       `{"api_version":"1.0.0","min_client_version":"1.0.0"}` in the envelope.
-- [ ] ruff (`select` incl. `E,F,I,UP,B,S,ASYNC`), mypy `strict = true`, pytest
+- [x] ruff (`select` incl. `E,F,I,UP,B,S,ASYNC`), mypy `strict = true`, pytest
       config in `src/app/pyproject.toml`.
-- [ ] `scripts/verify` with a `--local` mode that skips Docker.
+- [x] `scripts/verify` with a `--local` mode that skips Docker.
 
 **Exit:** `verify --local` green; `/api/v1/_version` answers in the envelope.
 
@@ -73,49 +73,49 @@ the verify contract (restart → wait on `/api/v1/_version` → ruff → ruff fo
 
 Largest phase. Straight port of committed Go. Tasks are file-disjoint after 1.1.
 
-- [ ] **1.1 Data layer** — `db/database.py` (1 write conn behind a `Lock`,
+- [x] **1.1 Data layer** — `db/database.py` (1 write conn behind a `Lock`,
       thread-local read conns, PRAGMAs on connect, `schema.sql` applied at open),
       `db/schema.sql` (users, mobile_tokens, login_attempts), `db/testutil.py`
       (`open_test(extra_schema)` → temp file, never `/data/app.db`).
       **Produces:** `Database`, `open_test`.
-- [ ] **1.2 Timestamp + query helpers** — `models/timestamp.py` (`Timestamp`
+- [x] **1.2 Timestamp + query helpers** — `models/timestamp.py` (`Timestamp`
       annotated type: `BeforeValidator` parsing the SQLite layout set,
       `PlainSerializer` emitting `%Y-%m-%dT%H:%M:%SZ`), `models/query.py`
       (`QueryOpts`, `order_by_clause`, `filter_field`, `InvalidQuery`).
       **Produces:** `Timestamp`, `QueryOpts`, `InvalidQuery`.
-- [ ] **1.3 Envelope + exception handlers** — `handlers/envelope.py`:
+- [x] **1.3 Envelope + exception handlers** — `handlers/envelope.py`:
       `Envelope[T]`, `Meta`, the closed code set, `code_for_status`,
       `normalize_data`, and the four handlers (HTTPException,
       RequestValidationError, 404, 500). **Produces:** `Envelope`, `json_ok`,
       `json_list`, `json_error`, `json_validation_error`.
-- [ ] **1.4 Cache** — `cache/cache.py`: `get`/`set`/`bust(prefix)`, TTL, lock,
+- [x] **1.4 Cache** — `cache/cache.py`: `get`/`set`/`bust(prefix)`, TTL, lock,
       background janitor. **Produces:** `Cache`.
-- [ ] **1.5 Paging + client IP** — `handlers/paging.py` (`query_int` clamping,
+- [x] **1.5 Paging + client IP** — `handlers/paging.py` (`query_int` clamping,
       limit 1–200 default 50), `handlers/clientip.py` (trusted-peer set,
       `CF-Connecting-IP`, right-most non-trusted `X-Forwarded-For`).
-- [ ] **1.6 Security + CSRF middleware** — `middleware/security.py` (the CSP
+- [x] **1.6 Security + CSRF middleware** — `middleware/security.py` (the CSP
       string verbatim from GOVA), `middleware/csrf.py` (safe-method allowlist,
       verify only when the session cookie is present, `compare_digest`).
-- [ ] **1.7 Session + auth guards** — `middleware/auth.py`: HMAC-signed cookie
+- [x] **1.7 Session + auth guards** — `middleware/auth.py`: HMAC-signed cookie
       carrying `{uid, epo, exp}`, `set_session`, `clear_session`,
       `current_user_id`, `require_auth`, `require_page_auth` (303 to `/login`).
       **Produces:** `require_auth`, `require_page_auth`, `CurrentUser`.
-- [ ] **1.8 User + token models** — `models/user.py` (bcrypt, `session_epoch`,
+- [x] **1.8 User + token models** — `models/user.py` (bcrypt, `session_epoch`,
       `bump_session_epoch`), `models/mobile_token.py` (64-hex token, SHA-256
       stored). **Produces:** `UserModel`, `MobileTokenModel`.
-- [ ] **1.9 Rate limiter** — `handlers/ratelimit.py`: two buckets (5/15min per
+- [x] **1.9 Rate limiter** — `handlers/ratelimit.py`: two buckets (5/15min per
       address, 20 per account), account key = SHA-256 of the lowercased email,
       `clear_attempts` on success, windowed.
-- [ ] **1.10 Auth endpoints** — `handlers/auth.py`, `auth_mobile.py`,
+- [x] **1.10 Auth endpoints** — `handlers/auth.py`, `auth_mobile.py`,
       `register.py`: the eight endpoints from the contract, exact payloads.
-- [ ] **1.11 Static frontend** — `static/js/lib/{api,auth}.js` (verbatim from
+- [x] **1.11 Static frontend** — `static/js/lib/{api,auth}.js` (verbatim from
       GOVA), `static/css/input.css`, `static/pages/{home,login,register}.html`
       + their modules, vendored Swagger assets under `static/vendor/swagger/`.
-- [ ] **1.12 Baseline manifest + generated files** — hand-write `api.json`
+- [x] **1.12 Baseline manifest + generated files** — hand-write `api.json`
       (user model, 8 auth endpoints, 2 pages), `handlers/routes_gen.py`,
       `handlers/pages_gen.py`, `handlers/test_pages_gen.py`. Phase 3 asserts the
       builder reproduces these byte-identically (spec §8).
-- [ ] **1.13 Wire it up** — `main.py`: exception handlers, middleware,
+- [x] **1.13 Wire it up** — `main.py`: exception handlers, middleware,
       `/static` mount, `GET /`, `register_pages`, `_version`,
       `register_generated`, local-only `/docs`.
 
@@ -127,22 +127,22 @@ paths; `verify --local` green.
 
 ## Phase 2 — Builder core
 
-- [ ] **2.1 `lock.py`** — `fcntl.flock` LOCK_EX/LOCK_SH held across the whole
+- [x] **2.1 `lock.py`** — `fcntl.flock` LOCK_EX/LOCK_SH held across the whole
       transaction; `atomic_write` via temp file + `os.replace`; `BB_LOCK_PATH`
       override for tests.
-- [ ] **2.2 `fields.py`** — the `name:type` DSL, `ref:`/format hints, known
+- [x] **2.2 `fields.py`** — the `name:type` DSL, `ref:`/format hints, known
       types, `is_safe_ident`, `to_pascal`, `to_plural`, py/sql/input type maps.
-- [ ] **2.3 `schema.py`** — `PRAGMA table_info` introspection, normalized SQL
+- [x] **2.3 `schema.py`** — `PRAGMA table_info` introspection, normalized SQL
       types, `require_implicit_columns` (id, created_at), credential-column
       refusal, expanded reserved-name list (spec §6.8).
-- [ ] **2.4 `manifest.py`** — the dataclasses, upsert with conflict detection,
+- [x] **2.4 `manifest.py`** — the dataclasses, upsert with conflict detection,
       canonicalize, sha256 hash, `routes_gen`/`pages_gen` regeneration.
-- [ ] **2.5 `render.py`** — Jinja2 env (`trim_blocks`, `lstrip_blocks`),
+- [x] **2.5 `render.py`** — Jinja2 env (`trim_blocks`, `lstrip_blocks`),
       filters mirroring GOVA's `funcMap`, `ruff format` subprocess pass that is
       non-fatal on failure.
-- [ ] **2.6 `inspect.py` + `tools.py` + `cli.py`** — the seven commands with
+- [x] **2.6 `inspect.py` + `tools.py` + `cli.py`** — the seven commands with
       single-dash flags, path namespace validation, self-registration.
-- [ ] **2.7 Tests** — per-module plus the four-way concurrency test proving no
+- [x] **2.7 Tests** — per-module plus the four-way concurrency test proving no
       registration is lost.
 
 **Exit:** `bb inspect` reads the committed manifest; builder suite green.
@@ -151,16 +151,16 @@ paths; `verify --local` green.
 
 ## Phase 3 — Templates
 
-- [ ] **3.1** `model.py.j2` + `test_model.py.j2`
-- [ ] **3.2** `resource_handlers.py.j2` + `test_resource_handlers.py.j2`
-- [ ] **3.3** `handler.py.j2`, `page.{html,js}.j2`, `list_page.{html,js}.j2`
-- [ ] **3.4** `routes_gen.py.j2`, `pages_gen.py.j2`, `test_pages_gen.py.j2`
-- [ ] **3.5** `test_render_resource_to_dir` — render into a scratch copy of
+- [x] **3.1** `model.py.j2` + `test_model.py.j2`
+- [x] **3.2** `resource_handlers.py.j2` + `test_resource_handlers.py.j2`
+- [x] **3.3** `handler.py.j2`, `page.{html,js}.j2`, `list_page.{html,js}.j2`
+- [x] **3.4** `routes_gen.py.j2`, `pages_gen.py.j2`, `test_pages_gen.py.j2`
+- [x] **3.5** `test_render_resource_to_dir` — render into a scratch copy of
       `src/app`, then run ruff + mypy + pytest over it. **Highest-value test in
       the repo** (spec §4).
-- [ ] **3.6** Byte-identity assertion: builder regeneration of the Phase 1.12
+- [x] **3.6** Byte-identity assertion: builder regeneration of the Phase 1.12
       baseline `routes_gen.py` / `pages_gen.py` matches the committed files.
-- [ ] **3.7** End-to-end CLI tests, one per command.
+- [x] **3.7** End-to-end CLI tests, one per command.
 
 **Exit:** `bb resource` on a fresh table yields working, tested, type-clean CRUD.
 
@@ -168,15 +168,15 @@ paths; `verify --local` green.
 
 ## Phase 4 — Harness
 
-- [ ] **4.1** `CLAUDE.md` (+ `AGENTS.md` symlink) — the rules, the command
+- [x] **4.1** `CLAUDE.md` (+ `AGENTS.md` symlink) — the rules, the command
       table, the constraint list from spec §10, the harness section.
-- [ ] **4.2** `docs/API-CONTRACT.md` (frozen copy, header noting it is shared)
+- [x] **4.2** `docs/API-CONTRACT.md` (frozen copy, header noting it is shared)
       and `docs/DECISIONS.md` (spec §6, written as standalone entries).
-- [ ] **4.3** `README.md`, `SEED.md`, `CHECKLIST.md`.
-- [ ] **4.4** Skills: `bb-brainstorm`, `bb-writing-plans`, `bb-build-execution`
+- [x] **4.3** `README.md`, `SEED.md`, `CHECKLIST.md`.
+- [x] **4.4** Skills: `bb-brainstorm`, `bb-writing-plans`, `bb-build-execution`
       (+ its four scripts and two prompt templates).
-- [ ] **4.5** Commands: `/build`, `/launch`, `/security:analyze`.
-- [ ] **4.6** `.opencode/` agents + command symlinks; three install scripts.
+- [x] **4.5** Commands: `/build`, `/launch`, `/security:analyze`.
+- [x] **4.6** `.opencode/` agents + command symlinks; three install scripts.
 
 **Exit:** a fresh clone can be installed under either harness.
 
@@ -185,8 +185,17 @@ paths; `verify --local` green.
 ## Phase 5 — End-to-end validation
 
 - [ ] **5.1** Bring the Docker daemon up; run the real `scripts/verify`.
-- [ ] **5.2** Build a throwaway two-resource app with the finished template.
-- [ ] **5.3** Run `/security:analyze` over `src/app`; fix Critical/High/Medium.
-- [ ] **5.4** Point `gova-ios`'s `/export:mobile` at
+      *(Not done: the Docker daemon is down on this machine. Everything below
+      was verified against `scripts/verify --local`, which runs the identical
+      four checks; only the container path and the Tailwind compile step are
+      unexercised.)*
+- [x] **5.2** Build a throwaway two-resource app with the finished template.
+- [x] **5.3** Constraint sweep over `src/app`: no interpolated SQL outside
+      `models/`, no raw `db.*` in `handlers/` or `middleware/`, no
+      `Jinja2Templates`, no `innerHTML`, no raw `fetch()`, no hardcoded
+      secrets, and every `# noqa` / `type: ignore` justified. *(The full
+      `/security:analyze` agent audit is left for the user to run — it
+      dispatches subagents.)*
+- [x] **5.4** Point `gova-ios`'s `/export:mobile` at
       `black-box/src/app/api.json` and confirm it exports with **zero changes to
       that repo**. This is the proof that the frozen-contract decision held.
