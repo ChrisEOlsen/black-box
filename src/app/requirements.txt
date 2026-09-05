@@ -1,0 +1,6 @@
+# Runtime dependencies. Capped at four on purpose — see CLAUDE.md § Critical
+# Constraints. Adding a fifth requires a written justification in the plan.
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic==2.13.5
+bcrypt==5.0.0

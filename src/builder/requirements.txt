@@ -1,0 +1,5 @@
+# The builder's own dependencies. jinja2 renders the templates; ruff formats
+# what they produce (docs/DECISIONS.md § 2) and is invoked as a subprocess,
+# since ruff exposes no stable Python API.
+jinja2==3.1.6
+ruff==0.16.6

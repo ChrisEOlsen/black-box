@@ -1,0 +1,35 @@
+# Secrets and per-machine config
+.env
+.claude/settings.local.json
+# Generated per machine by install-opencode.sh. Anchored to the repo root on
+# purpose: a bare `opencode.json` would also match .opencode/opencode.json,
+# which is committed config.
+/opencode.json
+
+# Data, logs, build output
+data/
+logs/
+*.db
+*.db-shm
+*.db-wal
+src/app/static/css/style.css
+src/.bb-lock
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Build-time scratch — never committed into an app. See the same entry in
+# gova-monolith: this is a record of HOW a build was carried out, useful while
+# it runs and noise afterwards.
+.bb-build/
+.security/
+
+# Notes about developing THIS repo rather than an app built with it. A derived
+# project inherits every tracked file, and an AI opening that project reads
+# them as its own history.
+docs/black-box-history/

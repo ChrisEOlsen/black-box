@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# verify — the gate. Python has no compile step, so this is what stands in for
+# `go build ./...`: ruff finds what a compiler would have (undefined names, bad
+# signatures, unused imports), mypy --strict finds type errors across module
+# boundaries, and pytest finds behavior. See docs/DECISIONS.md § 1.
+#
+# Usage: scripts/verify [--local]
+#   --local   skip Docker; run against ./.venv. Same checks, no restart.
+# Exit:  0 pass | 1 failure
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+LOCAL=0
+[ "${1:-}" = "--local" ] && LOCAL=1
+
+if [ "$LOCAL" = 1 ]; then
+  VENV="$PWD/.venv"
+  if [ ! -x "$VENV/bin/python" ]; then
+    echo "no local venv at $VENV. Create it with:" >&2
+    echo "  uv venv --python 3.13 .venv" >&2
+    echo "  uv pip install --python .venv/bin/python -r src/app/requirements-dev.txt -r src/builder/requirements.txt" >&2
+    exit 1
+  fi
+  run() { local dir="$1" tool="$2"; shift 2; ( cd "$dir" && "$VENV/bin/$tool" "$@" ); }
+else
+  echo "==> restarting app"
+  docker compose restart app >/dev/null
+
+  port=$(grep -E '^APP_PORT=' .env 2>/dev/null | cut -d= -f2)
+  port=${port:-8080}
+  ready=""
+  for _ in $(seq 1 60); do
+    if curl -s -o /dev/null --max-time 2 "http://localhost:${port}/api/v1/_version"; then
+      ready=1; break
+    fi
+    sleep 0.5
+  done
+  if [ "$ready" != 1 ]; then
+    echo "app did not answer within 30s of restart" >&2
+    exit 1
+  fi
+  run() { local dir="$1"; shift; docker compose exec -T -w "/${dir#src/}" app "$@"; }
+fi
+
+check() {
+  local label="$1" dir="$2"; shift 2
+  echo "==> $label"
+  if ! run "$dir" "$@"; then
+    echo "FAILED: $label" >&2
+    exit 1
+  fi
+}
+
+check "app: ruff check"         src/app     ruff check .
+check "app: ruff format"        src/app     ruff format --check .
+check "app: mypy"               src/app     mypy .
+check "app: pytest"             src/app     pytest
+
+# The builder only exists in the builder image, so its suite runs locally.
+if [ "$LOCAL" = 1 ] && [ -d src/builder/bb ]; then
+  check "builder: ruff check"   src/builder ruff check .
+  check "builder: ruff format"  src/builder ruff format --check .
+  check "builder: mypy"         src/builder mypy bb
+  check "builder: pytest"       src/builder pytest
+fi
+
+echo "verify passed"

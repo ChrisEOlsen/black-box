@@ -1,0 +1,44 @@
+[project]
+name = "black-box-builder"
+version = "1.0.0"
+requires-python = ">=3.13"
+dependencies = ["jinja2==3.1.6", "ruff==0.16.6"]
+
+[project.scripts]
+bb = "bb.cli:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["bb"]
+
+[tool.setuptools.package-data]
+# Templates are baked into the installed package at image build time. This is
+# why editing anything under src/builder/ needs
+# `docker compose up -d --build builder` and not a plain restart.
+bb = ["templates/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"test_*.py" = ["S101", "S105", "S106"]
+# The builder interpolates table names into PRAGMA statements, which take no
+# bound parameters. is_safe_ident is what makes that safe; see schema.py.
+"bb/schema.py" = ["S608"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+python_files = ["test_*.py"]
+addopts = "-q"

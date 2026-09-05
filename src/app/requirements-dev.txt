@@ -1,0 +1,7 @@
+-r requirements.txt
+# The verification gate. ruff and mypy stand in for Go's compiler — see
+# docs/DECISIONS.md § 1.
+pytest==9.1.1
+httpx2==2.12.0
+ruff==0.16.6
+mypy==2.3.1

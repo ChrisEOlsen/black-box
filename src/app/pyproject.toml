@@ -1,0 +1,56 @@
+# Tool configuration for the app. Dependencies live in requirements.txt so the
+# Docker build needs no lockfile bootstrap and no uv on the host.
+
+[project]
+name = "black-box-app"
+version = "1.0.0"
+requires-python = ">=3.13"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+# E,F stand in for the compiler: undefined names, bad signatures, unused
+# imports. The rest are the rules that catch what a Go compiler would have
+# caught structurally — B for mutable-default and loop-variable-capture bugs,
+# S for the SQL-injection and hardcoded-secret classes the Critical Constraints
+# forbid, ASYNC for a blocking call inside `async def`.
+select = ["E", "F", "I", "UP", "B", "S", "ASYNC", "RUF"]
+ignore = [
+    # Line length is enforced by the formatter, not the linter; a generated
+    # SQL string that runs long is not a defect.
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert, and their fixtures carry throwaway credentials.
+"test_*.py" = ["S101", "S105", "S106"]
+"conftest.py" = ["S101", "S105", "S106"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+# Generated code is fully annotated, which is what makes strict reachable at
+# all — see docs/DECISIONS.md § 1.
+warn_unreachable = true
+exclude = ["^\\.venv/"]
+
+[[tool.mypy.overrides]]
+# uvicorn ships no stubs for its programmatic entry point.
+module = ["uvicorn.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+# One warning comes from inside starlette (an anyio alias it has not migrated
+# off) and is not actionable here. Silenced by exact message so a warning we
+# *can* act on still surfaces.
+filterwarnings = [
+    "error",
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]
+# Tests live alongside the code they cover, so every file belongs to exactly
+# one feature — a failing test names its own author.
+testpaths = ["."]
+python_files = ["test_*.py"]
+addopts = "-q"

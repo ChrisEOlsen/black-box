@@ -1,0 +1,23 @@
+name: ${APP_NAME:-my-black-box-app}
+
+services:
+  app:
+    build:
+      context: .
+      target: app
+    ports:
+      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
+    volumes:
+      - ./src:/src
+      - ./data:/data
+      - ./logs:/logs
+    env_file: .env
+
+  builder:
+    build:
+      context: .
+      target: builder-cli
+    volumes:
+      - ./src:/src
+      - ./data:/data
+    restart: unless-stopped
