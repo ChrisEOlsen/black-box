@@ -1,0 +1,34 @@
+# Code generated from api.json by bb-builder. DO NOT EDIT.
+from __future__ import annotations
+
+{% if any_auth %}
+from fastapi import Depends, FastAPI
+{% else %}
+from fastapi import FastAPI
+{% endif %}
+
+from handlers.pages import page_file
+{% if any_auth %}
+from middleware.auth import require_page_auth
+{% endif %}
+
+
+def register_pages(app: FastAPI) -> None:
+    """Mount every page in api.json at its human-facing URL. main.py calls this
+    once and is never hand-edited for page routes."""
+{% for page in pages %}
+{% if page.auth %}
+    app.add_api_route(
+        "{{ page.path }}",
+        page_file("{{ page.file }}"),
+        methods=["GET"],
+        include_in_schema=False,
+        dependencies=[Depends(require_page_auth)],
+    )
+{% else %}
+    app.add_api_route("{{ page.path }}", page_file("{{ page.file }}"), methods=["GET"], include_in_schema=False)
+{% endif %}
+{% endfor %}
+{% if not pages %}
+    return
+{% endif %}

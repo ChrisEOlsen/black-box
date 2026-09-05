@@ -59,3 +59,12 @@ def test_nullable_field_serializes_as_null() -> None:
 def test_unparseable_string_is_rejected() -> None:
     with pytest.raises(ValidationError):
         Row(at="not a date")  # type: ignore[arg-type]
+
+
+def test_timestamp_to_db_renders_the_wire_format() -> None:
+    """sqlite3's datetime adapters are gone since 3.12, so a bound datetime
+    raises — generated models bind through this instead."""
+    from models.timestamp import timestamp_to_db
+
+    assert timestamp_to_db(datetime(2024, 1, 2, 3, 4, 5, 999, tzinfo=UTC)) == "2024-01-02T03:04:05Z"
+    assert timestamp_to_db(None) is None

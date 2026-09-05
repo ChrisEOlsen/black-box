@@ -11,6 +11,7 @@ from typing import Annotated
 from fastapi import Depends, Request, Response
 from pydantic import BaseModel
 
+from deps import DatabaseDep
 from handlers.clientip import client_ip
 from handlers.envelope import Envelope, internal, not_found, unauthorized, validation_failed
 from handlers.ratelimit import (
@@ -20,7 +21,7 @@ from handlers.ratelimit import (
     login_bucket,
     record_login_failure,
 )
-from middleware.auth import CurrentUser, DatabaseDep
+from middleware.auth import CurrentUser
 from middleware.session import clear_session, set_session
 from models.user import PublicUser, User, UserModel, UserNotFound
 

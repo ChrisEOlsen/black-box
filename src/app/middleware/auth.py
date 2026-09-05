@@ -18,22 +18,13 @@ from typing import Annotated
 from fastapi import Depends, Request
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from db.database import Database
+from deps import DatabaseDep
 from handlers.envelope import ApiError
 from middleware.session import read_session
 from models.mobile_token import MobileTokenModel, TokenInvalid, hash_token
 from models.user import UserModel
 
 BEARER_PREFIX = "Bearer "
-
-
-def get_database(request: Request) -> Database:
-    """The app's Database, put on the state at startup by main.py."""
-    database: Database = request.app.state.database
-    return database
-
-
-DatabaseDep = Annotated[Database, Depends(get_database)]
 
 
 def cookie_user_id(request: Request, db: DatabaseDep) -> int | None:

@@ -1,0 +1,36 @@
+# Code generated from api.json by bb-builder. DO NOT EDIT.
+from __future__ import annotations
+
+{% if uses_auth %}
+from fastapi import Depends, FastAPI
+{% else %}
+from fastapi import FastAPI
+{% endif %}
+
+from handlers import {{ modules | join(", ") }}
+from handlers.envelope import Envelope
+{% if uses_auth %}
+from middleware.auth import require_auth
+{% endif %}
+{% for import_line in model_imports %}
+{{ import_line }}
+{% endfor %}
+
+
+def register_generated(app: FastAPI) -> None:
+    """Mount every API route in api.json. main.py calls this once and is never
+    hand-edited for routes."""
+{% for route in routes %}
+    app.add_api_route(
+        "{{ route.path }}",
+        {{ route.call }},
+        methods=["{{ route.method }}"],
+        response_model={{ route.response_model }},
+{% if route.auth %}
+        dependencies=[Depends(require_auth)],
+{% endif %}
+    )
+{% endfor %}
+{% if not routes %}
+    return
+{% endif %}

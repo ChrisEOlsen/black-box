@@ -12,11 +12,12 @@ from typing import Annotated
 from fastapi import Depends, Request
 from pydantic import BaseModel
 
+from deps import DatabaseDep
 from handlers.auth import Credentials, Status, UsersDep, authenticate, require_credentials
 from handlers.clientip import client_ip
 from handlers.envelope import Envelope, not_found, unauthorized
 from handlers.ratelimit import login_token_bucket
-from middleware.auth import BearerUser, DatabaseDep
+from middleware.auth import BearerUser
 from models.mobile_token import (
     TOKEN_TTL_SECONDS,
     MobileTokenModel,

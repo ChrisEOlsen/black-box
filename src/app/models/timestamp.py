@@ -68,6 +68,17 @@ def format_timestamp(value: datetime) -> str:
     return aware.astimezone(UTC).strftime(WIRE_FORMAT)
 
 
+def timestamp_to_db(value: datetime | None) -> str | None:
+    """Render for binding into SQLite.
+
+    Python's sqlite3 datetime adapters are deprecated since 3.12 and are not
+    registered, so binding a datetime directly raises. Generated models bind
+    every timestamp column through this instead, which also guarantees the
+    stored text is the same RFC3339 the wire uses.
+    """
+    return None if value is None else format_timestamp(value)
+
+
 Timestamp = Annotated[
     datetime,
     BeforeValidator(parse_timestamp),

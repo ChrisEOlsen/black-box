@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from cache.cache import Cache
 from db.database import Database
 from handlers.envelope import Envelope, register_exception_handlers
 from handlers.pages_gen import register_pages
@@ -52,6 +53,7 @@ def check_secret() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.database = Database(os.getenv("DB_PATH", ""))
+    app.state.cache = Cache()
     log.info("black-box app ready")
     try:
         yield

@@ -23,6 +23,11 @@ ignore = [
     "E501",
 ]
 
+[tool.ruff.lint.isort]
+# Named explicitly: generated files are formatted by the builder from outside
+# this directory, and without this ruff sorts them as third-party imports.
+known-first-party = ["cache", "db", "deps", "handlers", "main", "middleware", "models"]
+
 [tool.ruff.lint.per-file-ignores]
 # Tests assert, and their fixtures carry throwaway credentials.
 "test_*.py" = ["S101", "S105", "S106"]
