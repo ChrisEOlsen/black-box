@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# verify — the one verification path an implementer's work is judged by.
+#
+# A thin wrapper over the repo's scripts/verify, which restarts the app and
+# then runs ruff, ruff format --check, mypy --strict and pytest. Python has no
+# compile step, so all four together are what `go build && go test` is in the
+# Go template. See docs/DECISIONS.md § 1.
+#
+# Usage: verify [--local]
+# Exit:  0 pass | 1 failure
+set -euo pipefail
+exec "$(git rev-parse --show-toplevel)/scripts/verify" "$@"
