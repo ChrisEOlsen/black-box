@@ -46,6 +46,7 @@ exclude = ["^\\.venv/"]
 module = ["uvicorn.*"]
 ignore_missing_imports = true
 
+
 [tool.pytest.ini_options]
 # One warning comes from inside starlette (an anyio alias it has not migrated
 # off) and is not actionable here. Silenced by exact message so a warning we

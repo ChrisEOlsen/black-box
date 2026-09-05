@@ -48,7 +48,7 @@ def require_credentials(body: Credentials) -> Credentials:
     """Reject blank values. A *missing* key is already a 422 from Pydantic; a
     present-but-empty one is not, so it is checked here and answers the same
     way."""
-    fields = {}
+    fields: dict[str, str] = {}
     if not body.email.strip():
         fields["email"] = "required"
     if not body.password:

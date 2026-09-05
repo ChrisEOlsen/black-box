@@ -10,17 +10,21 @@ reviewed. See docs/DECISIONS.md § 14.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from bb.codegen import pages_data, routes_data
-from bb.manifest import read_manifest
+from bb.manifest import Manifest, read_manifest
 from bb.render import format_python, render_to_string
 
 APP = Path(__file__).resolve().parents[1] / "app"
 
-CASES = [
+BuildData = Callable[[Manifest], dict[str, Any]]
+
+CASES: list[tuple[str, str, BuildData]] = [
     ("routes_gen.py", "routes_gen.py.j2", routes_data),
     ("pages_gen.py", "pages_gen.py.j2", pages_data),
     ("test_pages_gen.py", "test_pages_gen.py.j2", pages_data),
@@ -29,10 +33,10 @@ CASES = [
 
 @pytest.mark.parametrize(("filename", "template", "build_data"), CASES)
 def test_committed_file_matches_a_fresh_render(
-    filename: str, template: str, build_data: object
+    filename: str, template: str, build_data: BuildData
 ) -> None:
     manifest = read_manifest(APP / "api.json")
-    data = build_data(manifest)  # type: ignore[operator]
+    data = build_data(manifest)
     target = APP / "handlers" / filename
     generated = format_python(str(target), render_to_string(template, data))
     assert generated == target.read_text(), (

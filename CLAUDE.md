@@ -201,6 +201,14 @@ generated import. See `docs/DECISIONS.md` § 12.
   `ruff check`, `ruff format --check`, `mypy` and `pytest`. Pass `--local` to
   run the same checks against `./.venv` without Docker.
 
+**Your editor is not the gate.** Pylance and basedpyright apply rules mypy does
+not. `pyrightconfig.json` in each package pins them to `strict` and silences the
+pytest false positives, so a fresh clone is quiet — but pyright ships through
+npm, which Constraint 6 rules out, so it stays advice and `scripts/verify` stays
+the standard. Both packages and a freshly scaffolded app are clean under it
+today; keep them that way where it costs nothing, and never add a
+`# type: ignore` to satisfy a rule the gate does not run.
+
 **If you change a template under `src/builder/`, the gate is
 `src/builder/test_render_resource_to_dir.py`.** It renders a resource into a
 scratch copy of `src/app` and runs all four checks over the result. Nothing

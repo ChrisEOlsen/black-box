@@ -11,16 +11,26 @@ from __future__ import annotations
 import os
 import sqlite3
 import threading
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Final, cast, final
 
-SCHEMA_PATH = Path(__file__).with_name("schema.sql")
+SCHEMA_PATH: Final = Path(__file__).with_name("schema.sql")
+
+# What SQLite can bind natively. We register no adapters — Python's datetime
+# adapters are deprecated since 3.12 — so a `datetime` is NOT bindable here;
+# models convert through `models.timestamp.timestamp_to_db` first.
+#
+# Spelled out rather than `Sequence[Any]` so that passing a datetime is a type
+# error at the call site instead of an `InterfaceError` at runtime. `bool` binds
+# because it is a subclass of `int`.
+type SQLValue = str | bytes | int | float | None
+type SQLParams = Sequence[SQLValue]
 
 # Applied to every connection. Python's sqlite3 URI support does not carry
 # these the way the Go driver's DSN query string did, so they are executed.
-_PRAGMAS = (
+_PRAGMAS: Final = (
     "PRAGMA journal_mode = WAL",
     "PRAGMA busy_timeout = 5000",
     "PRAGMA foreign_keys = ON",
@@ -38,30 +48,42 @@ def _connect(path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     for pragma in _PRAGMAS:
-        conn.execute(pragma)
+        _ = conn.execute(pragma)
     return conn
 
 
+@final
 class Database:
     """Two pools against one SQLite file.
 
     A single write connection, since SQLite serializes writes anyway and a
     second one only produces SQLITE_BUSY; and one read connection per worker
     thread, created on first use.
+
+    `@final` is intent, not decoration: the connection handling above is only
+    correct as written, and a subclass overriding it would break the threading
+    guarantee silently.
     """
+
+    path: str
+    _write_conn: sqlite3.Connection
+    _write_lock: threading.Lock
+    _local: threading.local
+    _readers: list[sqlite3.Connection]
+    _readers_lock: threading.Lock
 
     def __init__(self, path: str = "") -> None:
         self.path = path or os.getenv("DB_PATH") or "/data/app.db"
         self._write_conn = _connect(self.path)
         self._write_lock = threading.Lock()
         self._local = threading.local()
-        self._readers: list[sqlite3.Connection] = []
+        self._readers = []
         self._readers_lock = threading.Lock()
         self._apply_schema()
 
     def _apply_schema(self) -> None:
         with self._write_lock:
-            self._write_conn.executescript(SCHEMA_PATH.read_text())
+            _ = self._write_conn.executescript(SCHEMA_PATH.read_text())
 
     @property
     def _read_conn(self) -> sqlite3.Connection:
@@ -76,38 +98,41 @@ class Database:
 
     # --- reads ------------------------------------------------------------
 
-    def query(self, sql: str, params: Sequence[Any] = ()) -> list[sqlite3.Row]:
+    def query(self, sql: str, params: SQLParams = ()) -> list[sqlite3.Row]:
         """Run a SELECT and return every row."""
         cur = self._read_conn.execute(sql, params)
         try:
-            return cur.fetchall()
+            # The cursor's row_factory makes these Rows; the stubs type the
+            # fetch methods as Any, so the cast is where that is pinned down.
+            return cast("list[sqlite3.Row]", cur.fetchall())
         finally:
             cur.close()
 
-    def query_one(self, sql: str, params: Sequence[Any] = ()) -> sqlite3.Row | None:
+    def query_one(self, sql: str, params: SQLParams = ()) -> sqlite3.Row | None:
         """Run a SELECT and return the first row, or None."""
         cur = self._read_conn.execute(sql, params)
         try:
-            # Annotated rather than returned directly: fetchone() is typed Any,
-            # and mypy --strict refuses to launder that through a return.
-            row: sqlite3.Row | None = cur.fetchone()
-            return row
+            return cast("sqlite3.Row | None", cur.fetchone())
         finally:
             cur.close()
 
-    def scalar(self, sql: str, params: Sequence[Any] = ()) -> Any:
+    def scalar(self, sql: str, params: SQLParams = ()) -> SQLValue:
         """Run a SELECT and return the first column of the first row."""
         row = self.query_one(sql, params)
-        return None if row is None else row[0]
+        return None if row is None else cast("SQLValue", row[0])
 
     # --- writes -----------------------------------------------------------
 
     @contextmanager
-    def write(self) -> Iterator[sqlite3.Cursor]:
+    def write(self) -> Generator[sqlite3.Cursor]:
         """Hold the write connection for a cursor's lifetime.
 
         Used where a caller needs `lastrowid` or `rowcount` from the same
         cursor that ran the statement.
+
+        NOT reentrant: `execute`, `insert` and `executescript` all take this
+        lock, so calling one from inside a `with db.write()` block deadlocks.
+        Run the statements on the cursor you already hold instead.
         """
         with self._write_lock:
             cur = self._write_conn.cursor()
@@ -116,22 +141,22 @@ class Database:
             finally:
                 cur.close()
 
-    def execute(self, sql: str, params: Sequence[Any] = ()) -> int:
+    def execute(self, sql: str, params: SQLParams = ()) -> int:
         """Run one write and return its rowcount."""
         with self.write() as cur:
-            cur.execute(sql, params)
+            _ = cur.execute(sql, params)
             return cur.rowcount
 
-    def insert(self, sql: str, params: Sequence[Any] = ()) -> int:
+    def insert(self, sql: str, params: SQLParams = ()) -> int:
         """Run one INSERT and return its new row id."""
         with self.write() as cur:
-            cur.execute(sql, params)
+            _ = cur.execute(sql, params)
             return int(cur.lastrowid or 0)
 
     def executescript(self, sql: str) -> None:
         """Run arbitrary DDL. `bb sql` is the only ordinary caller."""
         with self._write_lock:
-            self._write_conn.executescript(sql)
+            _ = self._write_conn.executescript(sql)
 
     def close(self) -> None:
         with self._readers_lock:

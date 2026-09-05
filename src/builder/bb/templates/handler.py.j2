@@ -26,6 +26,10 @@ class {{ pascal_name }}Response(BaseModel):
 def {{ name }}(db: DatabaseDep, cache: CacheDep) -> Envelope[{{ pascal_name }}Response]:
     """{{ method }} — TODO: implement.
 
+    `db` and `cache` arrive wired and unused; a strict type checker will flag
+    them until you use them, which is the point. Reach for a model in `models/`
+    rather than querying `db` here.
+
     Raise from handlers.envelope (`not_found()`, `conflict()`,
     `validation_failed({...})`) rather than returning an error shape by hand.
     """

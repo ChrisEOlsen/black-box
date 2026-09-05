@@ -38,6 +38,7 @@ ignore = ["E501"]
 python_version = "3.13"
 strict = true
 
+
 [tool.pytest.ini_options]
 testpaths = ["."]
 python_files = ["test_*.py"]

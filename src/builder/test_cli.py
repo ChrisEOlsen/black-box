@@ -275,3 +275,63 @@ def test_a_format_hint_mismatch_explains_itself_in_the_callers_words(ws: Workspa
     message = str(caught.value)
     assert "declared as datetime" in message
     assert "at:timestamp" in message
+
+
+# --- body schemas are validated, not trusted -----------------------------
+
+
+@pytest.mark.parametrize(
+    ("schema", "expected"),
+    [
+        ("{oops", "not valid JSON"),
+        ('["a"]', "must be a JSON object"),
+        ('{"shape": "nope"}', "shape must be"),
+        ('{"model": 123}', "model must be a string"),
+        ('{"fields": "nope"}', "fields must be a list"),
+        ('{"fields": ["nope"]}', "each entry in fields must be an object"),
+        ('{"fields": [{"type": "string"}]}', "string 'name'"),
+        ('{"fields": [{"name": "x", "type": 7}]}', "string 'type'"),
+        ('{"model": "user", "fields": [{"name": "x", "type": "string"}]}', "never both"),
+    ],
+)
+def test_a_bad_body_schema_is_refused(ws: Workspace, schema: str, expected: str) -> None:
+    """Whatever survives this goes verbatim into api.json, which a native
+    client then reads — so a wrong type here would be persisted, not merely
+    rejected."""
+    with pytest.raises(ToolError, match=expected):
+        run(
+            [
+                "handler",
+                "-name",
+                "x",
+                "-method",
+                "GET",
+                "-path",
+                "/api/v1/x",
+                "-request-schema",
+                schema,
+            ],
+            ws,
+        )
+
+
+def test_a_valid_body_schema_is_recorded(ws: Workspace) -> None:
+    run(
+        [
+            "handler",
+            "-name",
+            "search",
+            "-method",
+            "POST",
+            "-path",
+            "/api/v1/search",
+            "-request-schema",
+            '{"shape": "object", "fields": [{"name": "q", "type": "string"}]}',
+        ],
+        ws,
+    )
+    endpoint = next(
+        e for e in read_manifest(ws.manifest_path).endpoints if e.path == "/api/v1/search"
+    )
+    assert endpoint.request is not None
+    assert [f.name for f in endpoint.request.fields] == ["q"]

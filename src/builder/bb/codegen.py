@@ -65,7 +65,7 @@ def _response_model(endpoint: Endpoint) -> tuple[str, str | None]:
 
 def routes_data(manifest: Manifest) -> dict[str, Any]:
     manifest.canonicalize()
-    routes = []
+    routes: list[dict[str, object]] = []
     modules: set[str] = set()
     imports: set[str] = set()
     uses_auth = False

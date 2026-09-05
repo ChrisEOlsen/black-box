@@ -41,10 +41,8 @@ def {{ name }}_list(
     try:
         items, total = _model(db, cache).get_page(page.limit, page.offset, _query_opts(request))
     except InvalidQuery as exc:
-        raise invalid_query(
-            f"invalid sort/filter column {str(exc)!r}; allowed: "
-            "id, {{ fields | join_names }}, created_at"
-        ) from None
+        allowed = "id, {{ fields | join_names }}, created_at"
+        raise invalid_query(f"invalid sort/filter column {str(exc)!r}; allowed: {allowed}") from None
     return Envelope(data=items, meta=Meta(limit=page.limit, offset=page.offset, total=total))
 
 

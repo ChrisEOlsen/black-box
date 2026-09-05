@@ -13,9 +13,10 @@ import logging
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable, MutableMapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
@@ -103,10 +104,6 @@ def _signature_params(fields: list[Field]) -> str:
     return ", ".join(f"{f.name}: {field_annotation(f)}" for f in fields)
 
 
-def _call_args(fields: list[Field], prefix: str) -> str:
-    return ", ".join(f"{prefix}{f.name}" for f in fields)
-
-
 def _bind_args(fields: list[Field], prefix: str) -> str:
     """The bound parameters for an INSERT or UPDATE.
 
@@ -114,7 +111,7 @@ def _bind_args(fields: list[Field], prefix: str) -> str:
     and a caller can append `item_id` after it. A timestamp goes through
     timestamp_to_db, because sqlite3 will not bind a datetime.
     """
-    parts = []
+    parts: list[str] = []
     for f in fields:
         expr = f"{prefix}{f.name}"
         if f.type == "timestamp":
@@ -138,7 +135,11 @@ def build_environment() -> Environment:
         # request, but a page title still lands in markup and gets escaped.
         autoescape=select_autoescape(enabled_extensions=("html",), default=False),
     )
-    env.filters.update(
+    # Jinja's stubs enumerate only its own builtin filters, so a custom filter
+    # whose signature matches none of them fails the union check. Registering
+    # filters is documented public API; this is a stub limitation, not a defect.
+    filters = cast("MutableMapping[str, Callable[..., object]]", env.filters)
+    filters.update(
         {
             "pascal": to_pascal,
             "plural": to_plural,
@@ -153,10 +154,9 @@ def build_environment() -> Environment:
             "placeholders": _placeholders,
             "update_set": _update_set,
             "signature_params": _signature_params,
+            "bind_args": _bind_args,
         }
     )
-    env.globals["call_args"] = _call_args
-    env.globals["bind_args"] = _bind_args
     return env
 
 

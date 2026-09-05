@@ -1,0 +1,21 @@
+{
+  // The GATE is ruff + mypy --strict, run by scripts/verify. This file exists
+  // so an editor running Pylance or basedpyright agrees with that gate instead
+  // of drowning a fresh clone in diagnostics the gate does not enforce.
+  //
+  // Pyright is deliberately NOT part of scripts/verify: it ships through npm,
+  // and Constraint 6 in CLAUDE.md rules out Node. Treat what your editor
+  // reports here as advice; mypy is the standard.
+  //
+  // Kept as pyrightconfig.json rather than [tool.pyright] in pyproject.toml
+  // because this one is found reliably no matter where the tree is checked out
+  // or copied to, and it takes precedence when both exist.
+  "typeCheckingMode": "strict",
+  "pythonVersion": "3.13",
+  "exclude": [".venv", "**/__pycache__", "**/node_modules", "build"],
+
+  // pytest collects test functions by name and injects fixtures, so a checker
+  // sees both as dead code. That is a false positive against the test runner,
+  // not a finding.
+  "reportUnusedFunction": "none"
+}

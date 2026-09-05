@@ -13,6 +13,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 from bb.codegen import regenerate
 from bb.fields import Field, FieldError, is_safe_ident, parse_fields, to_pascal, to_plural
@@ -271,24 +272,48 @@ def create_handler(
 
 
 def parse_body_schema(flag: str, raw: str) -> BodySchema | None:
+    """Parse a -request-schema / -response-schema argument.
+
+    Every member is type-checked rather than trusted. This is a CLI flag an
+    agent composes, and whatever comes out of it is written verbatim into
+    api.json — which a native client then reads. A wrong type here would be
+    persisted, not merely rejected.
+    """
     if not raw.strip():
         return None
     try:
-        parsed = json.loads(raw)
+        decoded: object = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise ToolError(f"{flag}: not valid JSON: {exc}") from exc
-    if not isinstance(parsed, dict):
+    if not isinstance(decoded, dict):
         raise ToolError(f"{flag}: must be a JSON object")
+    parsed = cast("dict[str, object]", decoded)
+
     shape = parsed.get("shape", "object")
-    if shape not in ("object", "list", "empty"):
+    if not isinstance(shape, str) or shape not in ("object", "list", "empty"):
         raise ToolError(f'{flag}: shape must be "object", "list" or "empty"')
-    if parsed.get("model") and parsed.get("fields"):
+
+    model = parsed.get("model", "")
+    if not isinstance(model, str):
+        raise ToolError(f"{flag}: model must be a string naming a scaffolded model")
+
+    raw_fields = parsed.get("fields", [])
+    if not isinstance(raw_fields, list):
+        raise ToolError(f"{flag}: fields must be a list of objects")
+
+    fields: list[ModelField] = []
+    for entry in cast("list[object]", raw_fields):
+        if not isinstance(entry, dict):
+            raise ToolError(f"{flag}: each entry in fields must be an object")
+        field = cast("dict[str, object]", entry)
+        for key in ("name", "type"):
+            if not isinstance(field.get(key), str):
+                raise ToolError(f"{flag}: every field needs a string {key!r}")
+        fields.append(ModelField.from_json(field))
+
+    if model and fields:
         raise ToolError(f"{flag}: set either model or fields, never both")
-    return BodySchema(
-        shape=shape,
-        model=parsed.get("model", ""),
-        fields=[ModelField.from_json(f) for f in parsed.get("fields", [])],
-    )
+    return BodySchema(shape=shape, model=model, fields=fields)
 
 
 # --- page -----------------------------------------------------------------

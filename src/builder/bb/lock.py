@@ -19,7 +19,7 @@ import fcntl
 import json
 import os
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -39,7 +39,7 @@ def lock_path() -> Path:
 
 
 @contextmanager
-def _flock(mode: int) -> Iterator[None]:
+def _flock(mode: int) -> Generator[None]:
     path = lock_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     handle = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
@@ -54,14 +54,14 @@ def _flock(mode: int) -> Iterator[None]:
 
 
 @contextmanager
-def workspace_lock() -> Iterator[None]:
+def workspace_lock() -> Generator[None]:
     """Exclusive. MUST NOT BE NESTED — a nested call would block on itself."""
     with _flock(fcntl.LOCK_EX):
         yield
 
 
 @contextmanager
-def workspace_read() -> Iterator[None]:
+def workspace_read() -> Generator[None]:
     """Shared: concurrent readers coexist, and a mutator still excludes them."""
     with _flock(fcntl.LOCK_SH):
         yield

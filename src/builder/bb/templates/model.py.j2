@@ -6,12 +6,10 @@ Data access lives here and nowhere else: handlers call model methods, never
 
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel
 
 from cache.cache import Cache
-from db.database import Database
+from db.database import Database, SQLValue
 from models.query import QueryOpts, filter_field, order_by_clause
 {% if has_writable_timestamp %}
 from models.timestamp import Timestamp, timestamp_to_db
@@ -56,6 +54,9 @@ class {{ pascal_name }}Page(BaseModel):
 
 
 class {{ pascal_name }}Model:
+    db: Database
+    cache: Cache
+
     def __init__(self, db: Database, cache: Cache) -> None:
         self.db = db
         self.cache = cache
@@ -68,7 +69,7 @@ class {{ pascal_name }}Model:
         """
         order_by = order_by_clause(opts.sort, {{ name | upper }}_COLUMNS)
         where = ""
-        args: list[Any] = []
+        args: list[SQLValue] = []
         if opts.filter_field:
             column = filter_field(opts.filter_field, {{ name | upper }}_COLUMNS)
             where = f" WHERE {column} = ?"
@@ -106,7 +107,7 @@ class {{ pascal_name }}Model:
         new_id = self.db.insert(
             "INSERT INTO {{ plural_name }} ({{ fields | join_names }}) "
             "VALUES ({{ fields | placeholders }})",
-            ({{ bind_args(fields, "data.") }}),
+            ({{ fields | bind_args("data.") }}),
         )
         self.cache.bust("{{ plural_name }}:")
         return new_id
@@ -115,7 +116,7 @@ class {{ pascal_name }}Model:
         """False means no such row — handlers map that to 404."""
         changed = self.db.execute(
             "UPDATE {{ plural_name }} SET {{ fields | update_set }} WHERE id = ?",
-            ({{ bind_args(fields, "data.") }} item_id),
+            ({{ fields | bind_args("data.") }} item_id),
         )
         if changed:
             self.cache.bust("{{ plural_name }}:")
