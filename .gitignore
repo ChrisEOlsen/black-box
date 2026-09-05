@@ -17,6 +17,8 @@ src/.bb-lock
 
 # Python
 __pycache__/
+*.egg-info/
+/src/builder/build/
 *.py[cod]
 .venv/
 .mypy_cache/
