@@ -7,6 +7,8 @@ generated from this template.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from pathlib import Path
 from typing import cast
 
 import pytest
@@ -167,7 +169,7 @@ def test_hsts_only_in_production(anon: TestClient) -> None:
 
 
 def test_an_oversized_body_is_refused(anon: TestClient) -> None:
-    from middleware.security import MAX_BODY_BYTES
+    from middleware.bodylimit import MAX_BODY_BYTES
 
     res = anon.post(
         "/api/v1/auth/login",
@@ -175,6 +177,54 @@ def test_an_oversized_body_is_refused(anon: TestClient) -> None:
         headers={"Content-Type": "application/json"},
     )
     assert res.status_code == 413
+
+
+def test_a_chunked_body_cannot_slip_past_the_cap(anon: TestClient) -> None:
+    """A chunked request declares no Content-Length, so a header-only check
+    passed it and the whole body was buffered anyway — 3 MB went straight
+    through. The cap is enforced on the bytes now, not on the claim."""
+    from middleware.bodylimit import MAX_BODY_BYTES
+
+    def stream() -> Iterator[bytes]:
+        sent = 0
+        while sent < MAX_BODY_BYTES * 3:
+            yield b"x" * 65536
+            sent += 65536
+
+    res = anon.post(
+        "/api/v1/auth/login",
+        content=stream(),
+        headers={"Content-Type": "application/json"},
+    )
+    assert res.status_code == 413
+    assert res.json()["error"] == "request body too large"
+
+
+def test_a_body_under_the_cap_still_streams_fine(anon: TestClient) -> None:
+    """The limit must not break ordinary chunked requests."""
+
+    def stream() -> Iterator[bytes]:
+        yield b'{"email": "a@b.co", '
+        yield b'"password": "hunter22222"}'
+
+    res = anon.post(
+        "/api/v1/auth/login", content=stream(), headers={"Content-Type": "application/json"}
+    )
+    assert res.status_code in (401, 422)  # reached the handler, not the limiter
+
+
+def test_the_rejection_still_carries_security_headers(anon: TestClient) -> None:
+    """The old early-return answered before the header middleware ran."""
+    from middleware.bodylimit import MAX_BODY_BYTES
+
+    res = anon.post(
+        "/api/v1/auth/login",
+        content=b"x" * (MAX_BODY_BYTES + 1),
+        headers={"Content-Type": "application/json"},
+    )
+    assert res.status_code == 413
+    assert res.headers["X-Content-Type-Options"] == "nosniff"
+    assert "Content-Security-Policy" in res.headers
 
 
 # --- L-6: the token table is bounded -------------------------------------
@@ -191,3 +241,70 @@ def test_tokens_per_user_are_capped(app: FastAPI, client: TestClient) -> None:
     database = cast("Database", app.state.database)
     live = database.scalar("SELECT COUNT(*) FROM mobile_tokens")
     assert live == MAX_TOKENS_PER_USER
+
+
+# --- L-2: sign-out-everywhere is one unit --------------------------------
+
+
+def test_logout_all_is_atomic(client: TestClient) -> None:
+    """Both halves land or neither. Run as separate autocommit statements, a
+    failure between them left bearer tokens live after the user was told they
+    had signed out everywhere."""
+    from db.testutil import open_test
+    from models.mobile_token import MobileTokenModel, generate_token, hash_token
+    from models.user import UserModel
+
+    with open_test() as db:
+        users = UserModel(db)
+        tokens = MobileTokenModel(db)
+        user_id = users.create("A", "a@b.co", PASSWORD)
+        raw = generate_token()
+        tokens.issue(hash_token(raw), user_id, 4_000_000_000)
+
+        users.revoke_all_sessions(user_id)
+        assert users.session_epoch(user_id) == 1
+        assert db.scalar("SELECT COUNT(*) FROM mobile_tokens") == 0
+
+
+def test_a_failed_transaction_rolls_both_halves_back() -> None:
+    """The epoch must not advance if the token sweep cannot run."""
+    import sqlite3
+
+    from db.testutil import open_test
+    from models.user import UserModel
+
+    with open_test() as db:
+        users = UserModel(db)
+        user_id = users.create("A", "a@b.co", PASSWORD)
+        before = users.session_epoch(user_id)
+        with pytest.raises(sqlite3.OperationalError), db.transaction() as cur:
+            _ = cur.execute(
+                "UPDATE users SET session_epoch = session_epoch + 1 WHERE id = ?", (user_id,)
+            )
+            _ = cur.execute("DELETE FROM no_such_table WHERE user_id = ?", (user_id,))
+        assert users.session_epoch(user_id) == before
+
+
+# --- L-4: trusted-proxy drift is visible ---------------------------------
+
+
+def test_startup_logs_the_effective_trusted_ranges(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, tmp_path: Path
+) -> None:
+    """This setting degrades silently: the symptom is a shared rate-limit
+    bucket, which looks like nothing until it locks everyone out."""
+    import logging
+
+    from handlers.clientip import trusted_networks
+
+    monkeypatch.setenv("TRUSTED_PROXIES", "172.18.0.0/16")
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "t.db"))
+    trusted_networks.cache_clear()
+    try:
+        import main
+
+        with caplog.at_level(logging.INFO, logger="app"), TestClient(main.create_app()):
+            pass
+        assert "172.18.0.0/16" in caplog.text
+    finally:
+        trusted_networks.cache_clear()

@@ -147,6 +147,20 @@ class UserModel:
         value = self.db.scalar("SELECT session_epoch FROM users WHERE id = ?", (user_id,))
         return int(value) if value is not None else 0
 
+    def revoke_all_sessions(self, user_id: int) -> None:
+        """Retire every session a user holds — cookie and bearer alike.
+
+        One transaction, because the two halves are a single promise. Run
+        separately, a failure between them leaves bearer tokens live after the
+        user has been told they signed out everywhere, which is the worst
+        possible direction for this particular lie.
+        """
+        with self.db.transaction() as cur:
+            _ = cur.execute(
+                "UPDATE users SET session_epoch = session_epoch + 1 WHERE id = ?", (user_id,)
+            )
+            _ = cur.execute("DELETE FROM mobile_tokens WHERE user_id = ?", (user_id,))
+
     def bump_session_epoch(self, user_id: int) -> None:
         """Invalidate every session issued before now, on every device.
 

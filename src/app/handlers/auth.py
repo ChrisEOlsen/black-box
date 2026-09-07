@@ -118,9 +118,7 @@ def logout(response: Response) -> Envelope[Status]:
     return Envelope(data=Status(status="logged out"))
 
 
-def logout_all(
-    response: Response, users: UsersDep, tokens: TokensDep, user_id: CurrentUser
-) -> Envelope[Status]:
+def logout_all(response: Response, users: UsersDep, user_id: CurrentUser) -> Envelope[Status]:
     """POST /api/v1/auth/logout_all — every device.
 
     Two mechanisms, because there are two kinds of session: the epoch bump
@@ -130,8 +128,7 @@ def logout_all(
     had signed out everywhere.
     """
     try:
-        users.bump_session_epoch(user_id)
-        _ = tokens.revoke_all_for_user(user_id)
+        users.revoke_all_sessions(user_id)
     except Exception:
         log.exception("session epoch bump failed for user %s", user_id)
         raise internal("Something went wrong. Try again.") from None

@@ -21,7 +21,7 @@ from collections.abc import Awaitable, Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import Response
 
 CONTENT_SECURITY_POLICY = "; ".join(
     (
@@ -37,10 +37,6 @@ CONTENT_SECURITY_POLICY = "; ".join(
         "frame-ancestors 'self'",
     )
 )
-
-# Refused before the body is read. A single worker means one oversized request
-# is a throughput problem for every other caller, not just a memory one.
-MAX_BODY_BYTES = 1024 * 1024
 
 # One year, and only sent over HTTPS in production — a browser ignores HSTS on
 # a plaintext response, and sending it in local development would pin
@@ -63,17 +59,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        declared = request.headers.get("content-length")
-        if declared is not None and declared.isdigit() and int(declared) > MAX_BODY_BYTES:
-            return JSONResponse(
-                status_code=413,
-                content={
-                    "ok": False,
-                    "error": "request body too large",
-                    "code": "validation_failed",
-                },
-            )
-
         response = await call_next(request)
         for name, value in SECURITY_HEADERS.items():
             response.headers[name] = value

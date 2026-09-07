@@ -20,10 +20,12 @@ from fastapi.staticfiles import StaticFiles
 
 from cache.cache import Cache
 from db.database import Database
+from handlers.clientip import trusted_networks
 from handlers.envelope import Envelope, register_exception_handlers
 from handlers.pages_gen import register_pages
 from handlers.routes_gen import register_generated
 from handlers.version import VersionInfo, version
+from middleware.bodylimit import BodySizeLimitMiddleware
 from middleware.csrf import CSRFMiddleware
 from middleware.security import SecurityHeadersMiddleware
 from middleware.session import secret_problem
@@ -57,6 +59,21 @@ def check_secret() -> None:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     app.state.database = Database(os.getenv("DB_PATH", ""))
     app.state.cache = Cache()
+
+    # Logged every boot because this setting silently degrades. If the compose
+    # network is recreated on a different subnet, the app stops believing
+    # CF-Connecting-IP and every caller shares one rate-limit bucket again —
+    # five bad logins then lock out the whole deployment. The symptom is
+    # invisible; this line is where you see the cause.
+    networks = trusted_networks()
+    if networks:
+        log.info("trusting forwarded headers from: %s", ", ".join(str(n) for n in networks))
+    elif is_production():
+        log.warning(
+            "TRUSTED_PROXIES is empty in production. If anything sits in front of this "
+            "app, every caller shares one rate-limit bucket. See /launch step 3."
+        )
+
     log.info("black-box app ready")
     try:
         yield
@@ -82,9 +99,12 @@ def create_app() -> FastAPI:
 
     register_exception_handlers(app)
 
-    # Outermost first: security headers wrap everything, CSRF runs inside them
-    # so a rejected request still carries the headers.
+    # Last added is outermost. Security headers therefore wrap everything —
+    # including the body-limit rejection, which previously shipped bare — and
+    # the body limit sits outside CSRF so an oversized request is refused
+    # before anything downstream buffers it.
     app.add_middleware(CSRFMiddleware)
+    app.add_middleware(BodySizeLimitMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
 
     app.mount("/static", StaticFiles(directory="static"), name="static")

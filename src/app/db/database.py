@@ -141,6 +141,26 @@ class Database:
             finally:
                 cur.close()
 
+    @contextmanager
+    def transaction(self) -> Generator[sqlite3.Cursor]:
+        """Run several statements as one unit.
+
+        The connection is in autocommit, so `write()` commits each statement as
+        it runs. Where two writes are one promise to the user, this is what
+        makes a crash between them impossible.
+        """
+        with self._write_lock:
+            cur = self._write_conn.cursor()
+            try:
+                _ = cur.execute("BEGIN IMMEDIATE")
+                yield cur
+                self._write_conn.commit()
+            except BaseException:
+                self._write_conn.rollback()
+                raise
+            finally:
+                cur.close()
+
     def execute(self, sql: str, params: SQLParams = ()) -> int:
         """Run one write and return its rowcount."""
         with self.write() as cur:

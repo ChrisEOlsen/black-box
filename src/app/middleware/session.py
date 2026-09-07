@@ -39,6 +39,11 @@ _PLACEHOLDER_MARKERS = ("change-me", "changeme", "replace-me", "replaceme", "you
 
 # A real secret from `openssl rand -hex 32` has ~16 distinct characters; base64
 # has more. Fewer than this means someone held down a key.
+#
+# This is a TRIPWIRE, not an entropy measurement: "01234567" repeated to 40
+# characters passes it. It catches the obviously-typed, not the merely weak.
+# Nothing here can tell a strong secret from a memorable one — only
+# `openssl rand -hex 32` can do that, which is why every message says so.
 MIN_SECRET_DISTINCT_CHARS = 8
 
 
