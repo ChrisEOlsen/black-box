@@ -28,6 +28,9 @@ That second command writes the database code, the API endpoints, a web page with
 a form and delete buttons, and tests for all of it — then wires up the routes.
 The AI customizes what it generated rather than writing it from scratch.
 
+Everything it scaffolds requires a signed-in user by default. `-public` opts a
+resource out, because generic CRUD includes delete.
+
 The point: **the AI decides what to build; templates decide how.** Generated
 code arrives already wired, already tested, and already following the security
 rules, so a feature costs about a thousand tokens instead of a thousand lines of

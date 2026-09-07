@@ -42,6 +42,11 @@ Commands:
               with a create form and delete buttons.
   version     Print the builder version.
 
+Auth:
+  page, handler and resource require a signed-in user by DEFAULT. Pass -public
+  to open one up — and mean it: generic CRUD includes create, update and
+  delete, so a public resource is world-writable data.
+
 Field syntax (model, resource):
   Comma-separated name:type pairs — "title:string,quantity:int,due_at:timestamp"
   Types: string, int, boolean, float, timestamp.
@@ -70,13 +75,19 @@ def build_parser() -> argparse.ArgumentParser:
     page.add_argument("-file", required=True, help="filename without extension")
     page.add_argument("-title", required=True, help="page title")
     page.add_argument("-path", required=True, help="human-facing URL, e.g. /dashboard")
-    page.add_argument("-auth", action="store_true", help="redirect signed-out visitors to /login")
+    page.add_argument(
+        "-public",
+        action="store_true",
+        help="serve to signed-out visitors (default: redirect them to /login)",
+    )
 
     handler = sub.add_parser("handler", add_help=True)
     handler.add_argument("-name", required=True, help="handler name, snake_case")
     handler.add_argument("-method", required=True, help="GET, POST, PUT or DELETE")
     handler.add_argument("-path", required=True, help="full route path under /api/v1/")
-    handler.add_argument("-auth", action="store_true", help="require a signed-in user")
+    handler.add_argument(
+        "-public", action="store_true", help="allow unauthenticated callers (default: require auth)"
+    )
     handler.add_argument("-summary", default="", help="one line describing the endpoint")
     handler.add_argument("-request-schema", dest="request_schema", default="")
     handler.add_argument("-response-schema", dest="response_schema", default="")
@@ -84,6 +95,11 @@ def build_parser() -> argparse.ArgumentParser:
     resource = sub.add_parser("resource", add_help=True)
     resource.add_argument("-name", required=True, help="resource name, snake_case singular")
     resource.add_argument("-fields", required=True, help="comma-separated name:type list")
+    resource.add_argument(
+        "-public",
+        action="store_true",
+        help="scaffold world-writable CRUD (default: require a signed-in user)",
+    )
 
     sub.add_parser("version", add_help=True)
     return parser
@@ -106,20 +122,22 @@ def run(argv: Sequence[str], ws: Workspace | None = None) -> str:
         case "model":
             return create_model(workspace, args.name, split_fields(args.fields))
         case "page":
-            return create_page(workspace, args.file, args.title, args.path, auth=args.auth)
+            return create_page(workspace, args.file, args.title, args.path, auth=not args.public)
         case "handler":
             return create_handler(
                 workspace,
                 args.name,
                 args.method,
                 args.path,
-                auth=args.auth,
+                auth=not args.public,
                 summary=args.summary,
                 request_schema=args.request_schema,
                 response_schema=args.response_schema,
             )
         case "resource":
-            return scaffold_resource(workspace, args.name, split_fields(args.fields))
+            return scaffold_resource(
+                workspace, args.name, split_fields(args.fields), auth=not args.public
+            )
         case "version":
             return BUILDER_VERSION
         case _:

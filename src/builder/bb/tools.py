@@ -227,7 +227,7 @@ def create_handler(
     method: str,
     path: str,
     *,
-    auth: bool = False,
+    auth: bool = True,
     summary: str = "",
     request_schema: str = "",
     response_schema: str = "",
@@ -319,7 +319,7 @@ def parse_body_schema(flag: str, raw: str) -> BodySchema | None:
 # --- page -----------------------------------------------------------------
 
 
-def create_page(ws: Workspace, file: str, title: str, path: str, *, auth: bool = False) -> str:
+def create_page(ws: Workspace, file: str, title: str, path: str, *, auth: bool = True) -> str:
     if not is_safe_ident(file):
         raise ToolError("-file must be alphanumeric and underscore only")
     if not title.strip():
@@ -363,7 +363,7 @@ def validate_page_path(path: str) -> None:
 # --- resource -------------------------------------------------------------
 
 
-def scaffold_resource(ws: Workspace, name: str, raw_fields: list[str]) -> str:
+def scaffold_resource(ws: Workspace, name: str, raw_fields: list[str], *, auth: bool = True) -> str:
     with workspace_lock():
         fields = prepare_model(ws, name, raw_fields)
         plural = to_plural(name)
@@ -372,6 +372,7 @@ def scaffold_resource(ws: Workspace, name: str, raw_fields: list[str]) -> str:
         data = new_data(name, fields).as_dict()
         data["crud"] = True
         data["title"] = title
+        data["auth_required"] = auth
 
         written = [
             render_file(ws.models_dir / f"{name}.py", "model.py.j2", data),
@@ -390,8 +391,8 @@ def scaffold_resource(ws: Workspace, name: str, raw_fields: list[str]) -> str:
         commit(
             ws,
             models=[model],
-            endpoints=resource_endpoints(model),
-            pages=[list_page(name, title)],
+            endpoints=resource_endpoints(model, auth=auth),
+            pages=[list_page(name, title, auth=auth)],
         )
 
     return (
@@ -399,7 +400,11 @@ def scaffold_resource(ws: Workspace, name: str, raw_fields: list[str]) -> str:
         + f"\n\nRegistered CRUD for /api/v1/{plural} and the page /{plural}"
         + " in api.json + routes_gen.py + pages_gen.py."
         + "\nThe page includes a create form and delete buttons."
-        + "\nEndpoints are public — set auth:true per endpoint in api.json to protect them."
+        + (
+            "\nEndpoints and page require a signed-in user."
+            if auth
+            else "\nWARNING: scaffolded -public. Anyone can create, update and delete these."
+        )
     )
 
 

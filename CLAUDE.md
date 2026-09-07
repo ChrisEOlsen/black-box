@@ -135,9 +135,9 @@ infrastructure.
    under `static/vendor/`.
 
 7. **Security is already wired.** CSRF, sessions, rate limiting, bcrypt and the
-   CSP live in `middleware/` and `handlers/`. Protect an endpoint by setting
-   `auth: true` on it in `api.json`; protect a page the same way. Do not
-   re-check auth inside a handler — the generated route does it.
+   CSP live in `middleware/` and `handlers/`. Scaffolds are guarded by default;
+   `-public` opts one out, and `auth` in `api.json` is the record of that
+   choice. Do not re-check auth inside a handler — the generated route does it.
 
 8. **A new dependency needs a written justification.** Runtime dependencies are
    capped at four (`fastapi`, `uvicorn`, `pydantic`, `bcrypt`). Dependency
@@ -164,6 +164,11 @@ Run `./bb help`, or `./bb <command> -h` for a command's flags.
 | `./bb handler -name x -method POST -path /api/v1/...` | One custom JSON endpoint; self-registers | No — write one |
 | `./bb page -file x -title X -path /x` | `.html` + `.js` at a human URL; no handler needed | Yes |
 | `./bb resource -name x -fields ...` | Full CRUD + page + form. Table must exist | Yes |
+
+**`page`, `handler` and `resource` require a signed-in user by default.** Pass
+`-public` to open one up, and mean it: scaffolded CRUD includes create, update
+and delete, so a public resource is world-writable data. The default is the
+thing that ships, so the default is the safe one.
 
 `bb page` refuses `/api/`; `bb handler` requires `/api/v1/`. The two namespaces
 cannot collide. Resource pages are plural (`/projects`); the auth pages are

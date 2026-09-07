@@ -144,10 +144,15 @@ def test_page_refuses_the_static_namespace(ws: Workspace) -> None:
         run(["page", "-file", "x", "-title", "X", "-path", "/static/x"], ws)
 
 
-def test_guarded_page_generates_a_redirect_guard(ws: Workspace) -> None:
-    run(["page", "-file", "secret", "-title", "Secret", "-path", "/secret", "-auth"], ws)
-    generated = (ws.handlers_dir / "pages_gen.py").read_text()
-    assert "require_page_auth" in generated
+def test_a_page_is_guarded_by_default(ws: Workspace) -> None:
+    run(["page", "-file", "secret", "-title", "Secret", "-path", "/secret"], ws)
+    assert "require_page_auth" in (ws.handlers_dir / "pages_gen.py").read_text()
+
+
+def test_public_opts_a_page_out(ws: Workspace) -> None:
+    run(["page", "-file", "landing", "-title", "Landing", "-path", "/landing", "-public"], ws)
+    page = next(p for p in read_manifest(ws.manifest_path).pages if p.path == "/landing")
+    assert page.auth is False
 
 
 # --- handler --------------------------------------------------------------
@@ -170,9 +175,15 @@ def test_handler_refuses_an_unsupported_method(ws: Workspace) -> None:
         run(["handler", "-name", "x", "-method", "PATCH", "-path", "/api/v1/x"], ws)
 
 
-def test_handler_auth_flag_wraps_the_route(ws: Workspace) -> None:
-    run(["handler", "-name", "x", "-method", "GET", "-path", "/api/v1/x", "-auth"], ws)
+def test_a_handler_is_guarded_by_default(ws: Workspace) -> None:
+    run(["handler", "-name", "x", "-method", "GET", "-path", "/api/v1/x"], ws)
     assert "require_auth" in (ws.handlers_dir / "routes_gen.py").read_text()
+
+
+def test_public_opts_a_handler_out(ws: Workspace) -> None:
+    run(["handler", "-name", "x", "-method", "GET", "-path", "/api/v1/x", "-public"], ws)
+    endpoint = next(e for e in read_manifest(ws.manifest_path).endpoints if e.path == "/api/v1/x")
+    assert endpoint.auth is False
 
 
 def test_handler_rejects_a_malformed_schema(ws: Workspace) -> None:
@@ -211,6 +222,9 @@ def test_resource_writes_six_files_and_registers_everything(ws: Workspace) -> No
 
     manifest = read_manifest(ws.manifest_path)
     paths = {(e.method, e.path) for e in manifest.endpoints}
+    # Guarded by default: generic CRUD includes delete, so an unguarded
+    # resource is world-writable data.
+    assert all(e.auth for e in manifest.endpoints if e.path.startswith("/api/v1/projects"))
     assert ("GET", "/api/v1/projects") in paths
     assert ("GET", "/api/v1/projects/{id}") in paths
     assert ("POST", "/api/v1/projects") in paths
@@ -335,3 +349,28 @@ def test_a_valid_body_schema_is_recorded(ws: Workspace) -> None:
     )
     assert endpoint.request is not None
     assert [f.name for f in endpoint.request.fields] == ["q"]
+
+
+# --- the scaffold default is the thing that ships ------------------------
+
+
+def test_a_resource_is_guarded_by_default(ws: Workspace) -> None:
+    seed(ws)
+    run(["resource", "-name", "project", "-fields", "name:string"], ws)
+    manifest = read_manifest(ws.manifest_path)
+    assert all(e.auth for e in manifest.endpoints if "projects" in e.path)
+    assert next(p for p in manifest.pages if p.path == "/projects").auth is True
+
+
+def test_public_opts_a_whole_resource_out(ws: Workspace) -> None:
+    seed(ws)
+    run(["resource", "-name", "project", "-fields", "name:string", "-public"], ws)
+    manifest = read_manifest(ws.manifest_path)
+    assert not any(e.auth for e in manifest.endpoints if "projects" in e.path)
+    assert next(p for p in manifest.pages if p.path == "/projects").auth is False
+
+
+def test_the_public_flag_says_so_out_loud(ws: Workspace) -> None:
+    seed(ws)
+    out = run(["resource", "-name", "project", "-fields", "name:string", "-public"], ws)
+    assert "WARNING" in out

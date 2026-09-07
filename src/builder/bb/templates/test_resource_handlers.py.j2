@@ -19,6 +19,9 @@ from cache.cache import Cache
 from db.testutil import open_test
 from handlers.envelope import register_exception_handlers
 from handlers.routes_gen import register_generated
+{% if auth_required %}
+from middleware.auth import require_auth
+{% endif %}
 
 BASE = "/api/v1/{{ plural_name }}"
 
@@ -41,15 +44,55 @@ def payload() -> dict[str, Any]:
     }
 
 
+def build_app(db: object) -> FastAPI:
+    app = FastAPI()
+    register_exception_handlers(app)
+    app.state.database = db
+    app.state.cache = Cache(janitor=False)
+    register_generated(app)
+    return app
+
+
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     with open_test(SCHEMA) as db:
-        app = FastAPI()
-        register_exception_handlers(app)
-        app.state.database = db
-        app.state.cache = Cache(janitor=False)
-        register_generated(app)
+        app = build_app(db)
+{% if auth_required %}
+        # These routes require a signed-in user. Auth has its own tests; these
+        # cover CRUD, so the guard is satisfied rather than re-exercised. The
+        # test below proves it is actually there.
+        app.dependency_overrides[require_auth] = lambda: 1
+{% endif %}
         yield TestClient(app)
+{% if auth_required %}
+
+
+@pytest.fixture
+def anon() -> Iterator[TestClient]:
+    """No dependency override — a genuinely signed-out caller."""
+    with open_test(SCHEMA) as db:
+        yield TestClient(build_app(db))
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", BASE),
+        ("GET", f"{BASE}/1"),
+        ("POST", BASE),
+        ("PUT", f"{BASE}/1"),
+        ("DELETE", f"{BASE}/1"),
+    ],
+)
+def test_every_endpoint_requires_a_signed_in_user(
+    anon: TestClient, method: str, path: str
+) -> None:
+    """Scaffolded CRUD includes create, update and delete, so an unguarded
+    resource is world-writable. Pass -public only deliberately."""
+    res = anon.request(method, path, json=payload())
+    assert res.status_code == 401
+    assert res.json()["code"] == "unauthorized"
+{% endif %}
 
 
 def create_one(client: TestClient) -> dict[str, Any]:

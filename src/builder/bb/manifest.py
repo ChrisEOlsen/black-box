@@ -315,9 +315,14 @@ def fields_to_model(name: str, table: str, fields: list[Field]) -> Model:
     return Model(name=name, table=table, fields=out)
 
 
-def resource_endpoints(model: Model) -> list[Endpoint]:
+def resource_endpoints(model: Model, *, auth: bool = True) -> list[Endpoint]:
     """The five CRUD endpoints a resource registers. The handler symbols must
-    match resource_handlers.py.j2 exactly."""
+    match resource_handlers.py.j2 exactly.
+
+    `auth` defaults to True. Generic CRUD includes create, update and delete,
+    so an unguarded resource is world-writable data — and in an agent-driven
+    template, whatever the default is, is what ships.
+    """
     base = f"/api/v1/{to_plural(model.name)}"
     module = f"{model.name}_resource"
 
@@ -328,6 +333,7 @@ def resource_endpoints(model: Model) -> list[Endpoint]:
             handler=handler,
             module=module,
             deps=["db", "cache"],
+            auth=auth,
             model=model.name,
             kind=kind,
             request=resource_request(model, kind),
@@ -363,6 +369,10 @@ def resource_response(model: Model, kind: str) -> BodySchema:
     return BodySchema(shape="object", model=model.name)
 
 
-def list_page(name: str, title: str) -> Page:
-    """The page row a resource registers for its list shell."""
-    return Page(path=f"/{to_plural(name)}", file=to_plural(name), title=title)
+def list_page(name: str, title: str, *, auth: bool = True) -> Page:
+    """The page row a resource registers for its list shell.
+
+    Matches its endpoints: a guarded resource gets a guarded page, so a
+    signed-out visitor is redirected rather than shown a shell that 401s.
+    """
+    return Page(path=f"/{to_plural(name)}", file=to_plural(name), title=title, auth=auth)
