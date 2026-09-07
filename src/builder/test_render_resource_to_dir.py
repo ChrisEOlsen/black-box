@@ -123,7 +123,8 @@ def test_the_app_still_imports(scaffolded: Path) -> None:
     env = {
         **os.environ,
         "PYTHONPATH": str(scaffolded),
-        "SESSION_SECRET": "x" * 40,
+        # A realistic value: the app refuses low-variety secrets outright.
+        "SESSION_SECRET": "9f8e7d6c5b4a39281706f5e4d3c2b1a0",
         "DB_PATH": str(scaffolded.parent / "app.db"),
     }
     result = subprocess.run(

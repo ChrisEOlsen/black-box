@@ -18,6 +18,9 @@ TOKEN_BYTES = 32
 
 TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60
 
+# Live bearer tokens kept per user; the oldest are dropped past this.
+MAX_TOKENS_PER_USER = 10
+
 
 class TokenInvalid(Exception):
     """Unknown or expired.
@@ -40,10 +43,41 @@ class MobileTokenModel:
         self.db = db
 
     def issue(self, token_hash: str, user_id: int, expires_at: float) -> None:
+        # Prune on issue rather than on a schedule: this template has no cron,
+        # and issuing is the only moment the table grows. Bounded work — it
+        # touches one user's rows plus an indexed sweep of expired ones.
+        _ = self.delete_expired()
+        self._enforce_user_cap(user_id)
         self.db.execute(
             "INSERT INTO mobile_tokens (token_hash, user_id, expires_at) VALUES (?, ?, ?)",
             (token_hash, user_id, int(expires_at)),
         )
+
+    def _enforce_user_cap(self, user_id: int) -> None:
+        """Keep the newest MAX_TOKENS_PER_USER and drop the rest.
+
+        Without a cap, a caller with valid credentials can mint unbounded live
+        tokens, each independently usable until its own expiry.
+        """
+        self.db.execute(
+            """
+            DELETE FROM mobile_tokens
+            WHERE user_id = ? AND token_hash NOT IN (
+                SELECT token_hash FROM mobile_tokens
+                WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?
+            )
+            """,
+            (user_id, user_id, MAX_TOKENS_PER_USER - 1),
+        )
+
+    def revoke_all_for_user(self, user_id: int) -> int:
+        """Drop every bearer token a user holds.
+
+        The cookie epoch bump does not reach these: a token is a row, not a
+        signed claim. Without this, "log out everywhere" left every native
+        session — and any stolen token — alive for its full 30-day TTL.
+        """
+        return self.db.execute("DELETE FROM mobile_tokens WHERE user_id = ?", (user_id,))
 
     def revoke(self, token_hash: str) -> None:
         """An unknown hash is not an error: logout must not reveal whether the

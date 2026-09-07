@@ -42,6 +42,14 @@ def trusted_networks() -> tuple[Network, ...]:
     return tuple(networks)
 
 
+def _is_ip(value: str) -> bool:
+    try:
+        _ = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
+
+
 def _is_trusted(address: str) -> bool:
     try:
         parsed = ipaddress.ip_address(address)
@@ -57,14 +65,19 @@ def client_ip(request: Request) -> str:
         # An untrusted peer names only itself.
         return peer
 
+    # Validated, not just non-empty. This header is only self-evidently safe
+    # when every trusted proxy is Cloudflare, which overwrites it. Point
+    # TRUSTED_PROXIES at a generic nginx or traefik — which the env comment
+    # invites — and an unvalidated value lets a caller mint a fresh rate-limit
+    # bucket per request by sending garbage here.
     forwarded = request.headers.get("cf-connecting-ip", "").strip()
-    if forwarded:
+    if forwarded and _is_ip(forwarded):
         return forwarded
 
     # Right-most, because a client can prepend anything: everything to the left
     # of the first hop we trust is attacker-authored.
     chain = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
     for candidate in reversed(chain):
-        if not _is_trusted(candidate):
+        if _is_ip(candidate) and not _is_trusted(candidate):
             return candidate
     return peer

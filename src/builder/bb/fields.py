@@ -26,7 +26,11 @@ SEMANTIC_FORMATS = {
     "email": "email",
 }
 
-_SAFE_IDENT = re.compile(r"^[a-zA-Z0-9_]+$")
+# Leading digits excluded: the old pattern accepted "1project", which emitted
+# models/1project.py containing `class 1Project` — a syntax error the gate
+# caught much later, far from the command that caused it. This guard exists to
+# refuse names that cannot be emitted, so it has to know what an identifier is.
+_SAFE_IDENT = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
 @dataclass(slots=True)

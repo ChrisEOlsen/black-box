@@ -26,7 +26,7 @@ from handlers.routes_gen import register_generated
 from handlers.version import VersionInfo, version
 from middleware.csrf import CSRFMiddleware
 from middleware.security import SecurityHeadersMiddleware
-from middleware.session import MIN_SECRET_LENGTH
+from middleware.session import secret_problem
 
 log = logging.getLogger("app")
 
@@ -43,11 +43,14 @@ def configure_logging() -> None:
 
 
 def check_secret() -> None:
-    if len(os.getenv("SESSION_SECRET", "")) < MIN_SECRET_LENGTH:
-        raise SystemExit(
-            f"SESSION_SECRET must be set and at least {MIN_SECRET_LENGTH} characters. "
-            "Generate one with: openssl rand -hex 32"
-        )
+    """Refuse to boot on an unusable SESSION_SECRET.
+
+    This is a CODE gate, not a procedural one. /build and /launch also check,
+    but an agent-driven build can skip a command; it cannot skip this.
+    """
+    problem = secret_problem(os.getenv("SESSION_SECRET", ""))
+    if problem is not None:
+        raise SystemExit(f"SESSION_SECRET {problem}.\nGenerate one with: openssl rand -hex 32")
 
 
 @asynccontextmanager

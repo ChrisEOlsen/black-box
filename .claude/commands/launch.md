@@ -51,7 +51,41 @@ the outdated version every project inherits tomorrow.
 
 ---
 
-## Step 3: Restart Containers
+## Step 3: Set TRUSTED_PROXIES — do not skip this
+
+Once the tunnel is in front of the app, every request arrives from the
+cloudflared container, so the app sees ONE peer address for the entire
+internet. With `TRUSTED_PROXIES` empty — the default — all users share a single
+rate-limit bucket, and **five bad logins from anyone lock out every user of the
+deployment for fifteen minutes.**
+
+Set it to the compose network so the app believes `CF-Connecting-IP`, which
+Cloudflare overwrites on every request:
+
+```bash
+docker compose up -d          # creates the network if it does not exist
+docker network inspect "$(grep -E '^APP_NAME=' .env | cut -d= -f2)_default" \
+  --format '{{ (index .IPAM.Config 0).Subnet }}'
+```
+
+Write the subnet it prints into `.env` (commonly `172.16.0.0/12` on Docker's
+default pools):
+
+```
+TRUSTED_PROXIES=172.18.0.0/16
+```
+
+Then confirm the app is naming real client addresses rather than the tunnel:
+after one request through the public domain, `docker compose logs app` should
+not show every caller sharing the container's address.
+
+**Only list networks you control.** Anything inside a trusted range can claim
+any address it likes — that is the whole point of the setting, and the reason
+it is not simply `0.0.0.0/0`.
+
+---
+
+## Step 3b: Restart Containers
 
 ```bash
 docker compose up -d

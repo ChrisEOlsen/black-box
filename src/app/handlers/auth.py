@@ -23,7 +23,8 @@ from handlers.ratelimit import (
 )
 from middleware.auth import CurrentUser
 from middleware.session import clear_session, set_session
-from models.user import PublicUser, User, UserModel, UserNotFound
+from models.mobile_token import MobileTokenModel
+from models.user import MAX_PASSWORD_BYTES, PublicUser, User, UserModel, UserNotFound
 
 log = logging.getLogger("app")
 
@@ -33,6 +34,13 @@ def get_users(db: DatabaseDep) -> UserModel:
 
 
 UsersDep = Annotated[UserModel, Depends(get_users)]
+
+
+def get_tokens(db: DatabaseDep) -> MobileTokenModel:
+    return MobileTokenModel(db)
+
+
+TokensDep = Annotated[MobileTokenModel, Depends(get_tokens)]
 
 
 class Credentials(BaseModel):
@@ -54,6 +62,11 @@ def require_credentials(body: Credentials) -> Credentials:
     if not body.password:
         # S105 below: a validation message keyed "password", not a credential.
         fields["password"] = "required"  # noqa: S105
+    elif len(body.password.encode()) > MAX_PASSWORD_BYTES:
+        # bcrypt refuses over 72 bytes, and no account can have one, so this is
+        # a malformed request rather than a wrong guess. Answering 422 here
+        # keeps it out of the bcrypt path entirely.
+        fields["password"] = f"must be at most {MAX_PASSWORD_BYTES} bytes"
     if fields:
         raise validation_failed(fields)
     return Credentials(email=body.email.strip(), password=body.password)
@@ -105,11 +118,20 @@ def logout(response: Response) -> Envelope[Status]:
     return Envelope(data=Status(status="logged out"))
 
 
-def logout_all(response: Response, users: UsersDep, user_id: CurrentUser) -> Envelope[Status]:
-    """POST /api/v1/auth/logout_all — every device, by bumping the epoch every
-    issued cookie was signed against."""
+def logout_all(
+    response: Response, users: UsersDep, tokens: TokensDep, user_id: CurrentUser
+) -> Envelope[Status]:
+    """POST /api/v1/auth/logout_all — every device.
+
+    Two mechanisms, because there are two kinds of session: the epoch bump
+    retires every cookie signed before it, and the token sweep deletes the
+    bearer tokens native clients hold. Doing only the first would leave a
+    stolen token usable for its full 30-day TTL while telling the user they
+    had signed out everywhere.
+    """
     try:
         users.bump_session_epoch(user_id)
+        _ = tokens.revoke_all_for_user(user_id)
     except Exception:
         log.exception("session epoch bump failed for user %s", user_id)
         raise internal("Something went wrong. Try again.") from None

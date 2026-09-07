@@ -31,6 +31,35 @@ SESSION_TTL_SECONDS = 24 * 60 * 60
 
 MIN_SECRET_LENGTH = 32
 
+# A secret is worthless if it is public, and this template IS public: the
+# env.example placeholder is 39 characters, so a length check alone lets it
+# through and the app boots signing forgeable sessions. Anyone who has read
+# this repo could then mint a valid cookie for user 1.
+_PLACEHOLDER_MARKERS = ("change-me", "changeme", "replace-me", "replaceme", "your-secret")
+
+# A real secret from `openssl rand -hex 32` has ~16 distinct characters; base64
+# has more. Fewer than this means someone held down a key.
+MIN_SECRET_DISTINCT_CHARS = 8
+
+
+def secret_problem(secret: str) -> str | None:
+    """Why this SESSION_SECRET is unusable, or None if it is fine.
+
+    Shared by the startup check and the per-request signer so the two cannot
+    disagree about what counts as acceptable.
+    """
+    if len(secret) < MIN_SECRET_LENGTH:
+        return f"must be at least {MIN_SECRET_LENGTH} characters"
+    lowered = secret.lower()
+    if any(marker in lowered for marker in _PLACEHOLDER_MARKERS):
+        return (
+            "is still a placeholder from env.example. This template is public, so "
+            "that value is known to anyone who has read it"
+        )
+    if len(set(secret)) < MIN_SECRET_DISTINCT_CHARS:
+        return "has too little variety to be random"
+    return None
+
 
 def secure_cookies() -> bool:
     """Read per call, so a value set after import is honored."""
@@ -44,10 +73,9 @@ def session_secret() -> bytes:
     the difference between a session nobody can forge and one anybody can.
     """
     key = os.getenv("SESSION_SECRET", "")
-    if len(key) < MIN_SECRET_LENGTH:
-        raise RuntimeError(
-            f"SESSION_SECRET must be set and at least {MIN_SECRET_LENGTH} characters"
-        )
+    problem = secret_problem(key)
+    if problem is not None:
+        raise RuntimeError(f"SESSION_SECRET {problem}")
     return key.encode()
 
 

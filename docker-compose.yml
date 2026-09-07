@@ -6,7 +6,12 @@ services:
       context: .
       target: app
     ports:
-      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
+      # Bound to loopback: a development instance is reachable only from this
+      # machine. /launch publishes it through the Cloudflare tunnel, which
+      # connects outbound and needs no published port at all. Change this only
+      # if you deliberately want the LAN to reach an app whose secrets and
+      # data are still local.
+      - "127.0.0.1:${APP_PORT:-8080}:${APP_PORT:-8080}"
     volumes:
       - ./src:/src
       - ./data:/data

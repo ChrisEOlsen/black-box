@@ -114,7 +114,18 @@ class UserModel:
         return _row_to_user(row)
 
     def check_password(self, user: User, password: str) -> bool:
-        return bcrypt.checkpw(password.encode(), user.password_hash.encode())
+        """Verify a password. Never raises.
+
+        bcrypt refuses input over 72 bytes with a ValueError rather than
+        truncating. No account can HAVE such a password (create rejects it), so
+        an over-long candidate is simply wrong — but it must answer False, not
+        crash the request. Uncaught, it produced a 500 on the login path that
+        skipped rate-limit accounting entirely.
+        """
+        encoded = password.encode()
+        if len(encoded) > MAX_PASSWORD_BYTES:
+            return False
+        return bcrypt.checkpw(encoded, user.password_hash.encode())
 
     @staticmethod
     def burn_password_time(password: str) -> None:
@@ -122,8 +133,12 @@ class UserModel:
 
         Without this, a missing account answers measurably faster than a wrong
         password and the login endpoint becomes an account-enumeration oracle.
+
+        Truncated rather than skipped for over-long input: skipping would make
+        the unknown-account path fast again for exactly the requests that
+        bypass the check_password cost, restoring the timing signal.
         """
-        bcrypt.checkpw(password.encode(), _DUMMY_HASH)
+        bcrypt.checkpw(password.encode()[:MAX_PASSWORD_BYTES], _DUMMY_HASH)
 
     # --- sessions ---------------------------------------------------------
 
