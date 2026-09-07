@@ -5,6 +5,12 @@ services:
     build:
       context: .
       target: app
+    # The host user's ids. Both containers write into bind mounts — the app
+    # compiles CSS into ./src and owns ./data and ./logs; the builder writes
+    # generated files into ./src. Running as a mismatched uid makes every one
+    # of those a permission error, so install-common.sh records the real values
+    # in .env. The 1000 fallback matches the image default.
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     ports:
       # Bound to loopback: a development instance is reachable only from this
       # machine. /launch publishes it through the Cloudflare tunnel, which
@@ -22,6 +28,7 @@ services:
     build:
       context: .
       target: builder-cli
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     volumes:
       - ./src:/src
       - ./data:/data

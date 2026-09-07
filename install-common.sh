@@ -40,7 +40,12 @@ bb_check_prereqs() {
         || warn "stripe CLI not found — install for local webhook testing: https://stripe.com/docs/stripe-cli"
 }
 
-# bb_set_env_var FILE KEY VALUE — rewrite one KEY=... line in place.
+# bb_set_env_var FILE KEY VALUE — set KEY in place, appending it if absent.
+#
+# The append matters: this only rewrote existing lines, so a key added to
+# env.example after someone already had a .env was silently dropped on every
+# subsequent install. APP_UID was the first to hit it, and the symptom would
+# have been permission errors from a container running as the wrong user.
 bb_set_env_var() {
     local file="$1" key="$2" value="$3"
     python3 - "$file" "$key" "$value" <<'PYEOF'
@@ -48,7 +53,13 @@ import sys
 path, key, value = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(path) as f:
     lines = f.readlines()
-lines = [f"{key}={value}\n" if l.startswith(f"{key}=") else l for l in lines]
+prefix = f"{key}="
+if any(line.startswith(prefix) for line in lines):
+    lines = [f"{key}={value}\n" if line.startswith(prefix) else line for line in lines]
+else:
+    if lines and not lines[-1].endswith("\n"):
+        lines[-1] += "\n"
+    lines.append(f"{key}={value}\n")
 with open(path, "w") as f:
     f.writelines(lines)
 PYEOF
@@ -106,6 +117,14 @@ bb_setup_env() {
     else
         ok "SESSION_SECRET already set"
     fi
+
+    # Neither container runs as root, and both write into bind-mounted
+    # directories owned by this user. Recording the real ids here is what keeps
+    # `./bb resource` and the app's CSS build from failing with a permission
+    # error on Linux, where uid mismatches are not papered over.
+    bb_set_env_var "$ENV_FILE" "APP_UID" "$(id -u)"
+    bb_set_env_var "$ENV_FILE" "APP_GID" "$(id -g)"
+    ok "Containers will run as $(id -u):$(id -g) (non-root)"
 
     CONTAINER_NAME="${APP_NAME}-builder-1"
     ok "Builder container: $CONTAINER_NAME"

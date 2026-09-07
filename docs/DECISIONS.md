@@ -309,3 +309,37 @@ so a write in one would not bust the others'.
 `--reload` is omitted deliberately: a reloader watching a tree an agent is
 mid-write in produces crash loops rather than convenience, and the explicit
 `docker compose restart app` keeps `scripts/verify` a single, honest gate.
+
+## 19. The containers are not root, and the app image keeps its dev tools
+
+Two container decisions that look inconsistent and are not.
+
+**Non-root.** Neither image runs as root. `USER` is numeric rather than a
+created account, so the build cannot fail over a uid that already exists in the
+base image — Python needs no `passwd` entry.
+
+The complication is bind mounts. The app compiles CSS into `./src` and owns
+`./data` and `./logs`; the builder writes generated files into `./src`. On
+Linux a container uid that does not match the host owner turns every one of
+those into a permission error, and the symptom — `bb resource` failing
+mid-scaffold — points nowhere near the cause. So `docker-compose.yml` sets
+`user:` from `APP_UID`/`APP_GID`, and the install scripts record the host's
+real `id -u` / `id -g` in `.env`. The image default of 1000 is only what you
+get running it without compose.
+
+**Tailwind is pinned and checksum-verified.** It was fetched from `latest` at
+image build, so every downstream app's build depended on whatever shipped that
+morning — not reproducible, and an unverified binary pulled over the network
+into every image. A pin fixes reproducibility; the `sha256sum -c` is what makes
+the fetch trustworthy. Updating means bumping the version *and* both digests,
+which is the point: it is a deliberate act.
+
+**The dev tools stay in the app image**, and that is not an oversight.
+`scripts/verify` runs `ruff`, `mypy` and `pytest` **inside the app container** —
+that is the whole gate, and Python has no compiler behind it (§ 1). Stripping
+them would mean the artifact that gets verified is not the artifact that runs,
+which trades a real guarantee for a smaller image.
+
+The honest cost is a larger production image containing a test runner. If that
+matters for a particular deployment, the fix is a separate `prod` build target
+installing only `requirements.txt` — not removing the tools the gate needs.
